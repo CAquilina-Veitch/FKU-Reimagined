@@ -6,7 +6,7 @@ namespace Scripts.Interaction
     {
         public Transform Position => transform;
 
-        public void Interact()
+        public virtual void Interact()
         {
             Debug.Log("Interacted!");
         }

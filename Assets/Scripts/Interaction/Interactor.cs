@@ -1,73 +1,146 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using R3;
 using R3.Triggers;
 using UnityEngine;
 
 namespace Scripts.Interaction
 {
-    public class Interactor : MonoBehaviour
+    public abstract class Interactor : MonoBehaviour
     {
         public Transform Position => transform;
-        [SerializeField] private Collider collider;
-        [SerializeField] private List<Interactable> interactables;
+        [SerializeField] protected Collider interactionCollider;
+        [SerializeField] protected List<Interactable> interactables = new List<Interactable>();
+        
+        // Track the current closest interactable for UI purposes
+        protected readonly ReactiveProperty<Interactable> _closestInteractable = new ReactiveProperty<Interactable>(null);
+        public ReadOnlyReactiveProperty<Interactable> ClosestInteractable => _closestInteractable;
 
-
-        private void Awake()
+        protected virtual void Awake()
         {
-            Interactable checkInteractable = null;
-            collider.OnTriggerEnterAsObservable()
-                .Where(newObject => newObject
-                    .TryGetComponent(out checkInteractable))
-                .Subscribe(_ => 
-                    AddInteractable(checkInteractable)).AddTo(this);
+            if (interactionCollider == null)
+            {
+                Debug.LogError($"Interaction collider not set on {gameObject.name}");
+                return;
+            }
             
-            collider.OnTriggerExitAsObservable()
-                .Where(newObject => newObject
-                    .TryGetComponent(out checkInteractable))
-                .Subscribe(_ => 
-                    RemoveInteractable(checkInteractable)).AddTo(this);
+            SetupTriggerObservables();
         }
 
-        private void AddInteractable(Interactable newInteractable)
+        protected virtual void Start()
+        {
+            // Update closest interactable whenever the list changes
+            Observable.EveryUpdate()
+                .Where(_ => interactables.Count > 0)
+                .Subscribe(_ => UpdateClosestInteractable())
+                .AddTo(this);
+        }
+
+        private void SetupTriggerObservables()
+        {
+            interactionCollider.OnTriggerEnterAsObservable()
+                .Subscribe(other =>
+                {
+                    Debug.Log($"Trigger Enter: {other.name}");
+                    if (other.TryGetComponent<Interactable>(out var interactable))
+                    {
+                        Debug.Log($"Found Interactable component on {other.name}");
+                        AddInteractable(interactable);
+                    }
+                })
+                .AddTo(this);
+            
+            interactionCollider.OnTriggerExitAsObservable()
+                .Subscribe(other =>
+                {
+                    Debug.Log($"Trigger Exit: {other.name}");
+                    if (other.TryGetComponent<Interactable>(out var interactable))
+                    {
+                        Debug.Log($"Found Interactable component on {other.name} for removal");
+                        RemoveInteractable(interactable);
+                    }
+                })
+                .AddTo(this);
+        }
+
+        protected virtual void AddInteractable(Interactable newInteractable)
         {
             if (newInteractable == null) return;
-            interactables.Add(newInteractable);
-
+            
+            // Check if already in list to avoid duplicates
+            if (!interactables.Contains(newInteractable))
+            {
+                interactables.Add(newInteractable);
+                Debug.Log($"Added interactable: {newInteractable.name}. Total: {interactables.Count}");
+                UpdateClosestInteractable();
+                OnInteractableAdded(newInteractable);
+            }
         }
 
-        private void RemoveInteractable(Interactable removeInteractable)
+        protected virtual void RemoveInteractable(Interactable removeInteractable)
         {
             if (removeInteractable == null) return;
-            interactables.Remove(removeInteractable);
-        }
-
-        private void Update()
-        {
-            if (Input.GetKeyDown(KeyCode.E))
+            
+            bool wasRemoved = interactables.Remove(removeInteractable);
+            if (wasRemoved)
             {
-                TryInteract();
-            }
-        }
-
-        public void TryInteract()
-        {
-            if (interactables.Count > 0)
-            {
-                (Interactable, float) currentMatch = (null, Mathf.Infinity);
-                foreach (var i in interactables)
+                Debug.Log($"Removed interactable: {removeInteractable.name}. Total: {interactables.Count}");
+                
+                // If we removed the closest one, update
+                if (_closestInteractable.Value == removeInteractable)
                 {
-                    var distance = Vector3.Distance(i.Position.position, Position.position);
-                    if (distance < currentMatch.Item2) 
-                        currentMatch = (i, distance);
+                    UpdateClosestInteractable();
                 }
-                if (currentMatch.Item1 != null)
-                {
-                    currentMatch.Item1.Interact();
-                }
+                OnInteractableRemoved(removeInteractable);
             }
             else
+            {
+                Debug.LogWarning($"Tried to remove interactable {removeInteractable.name} but it wasn't in the list");
+            }
+        }
+
+        protected virtual void UpdateClosestInteractable()
+        {
+            if (interactables.Count == 0)
+            {
+                _closestInteractable.Value = null;
+                return;
+            }
+
+            var previousClosest = _closestInteractable.Value;
+            _closestInteractable.Value = interactables
+                .OrderBy(i => Vector3.Distance(i.Position.position, Position.position))
+                .FirstOrDefault();
+                
+            if (previousClosest != _closestInteractable.Value)
+            {
+                OnClosestInteractableChanged(previousClosest, _closestInteractable.Value);
+            }
+        }
+
+        public virtual void TryInteract()
+        {
+            if (_closestInteractable.Value != null)
+            {
+                _closestInteractable.Value.Interact();
+                OnInteractionPerformed(_closestInteractable.Value);
+            }
+            else
+            {
                 Debug.LogWarning($"{gameObject} tried to interact, but no interactables were found.");
+            }
+        }
+        
+        // Virtual hooks for derived classes
+        protected virtual void OnInteractableAdded(Interactable interactable) { }
+        protected virtual void OnInteractableRemoved(Interactable interactable) { }
+        protected virtual void OnClosestInteractableChanged(Interactable previous, Interactable current) { }
+        protected virtual void OnInteractionPerformed(Interactable interactable) { }
+        
+        protected virtual void OnDestroy()
+        {
+            _closestInteractable?.Dispose();
         }
     }
 }

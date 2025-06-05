@@ -8,6 +8,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Scripts.Managers;
+using CameraType = Scripts.Managers.CameraType;
 
 #if UNITY_EDITOR
     using UnityEditor;
@@ -164,6 +166,13 @@ public class FirstPersonController : MonoBehaviour
         else
         {
             crosshairObject.gameObject.SetActive(false);
+        }
+        
+        // Register camera with CameraManager
+        if (CameraManager.HasInstance && playerCamera != null)
+        {
+            CameraManager.Instance.RegisterCamera(CameraType.Player, playerCamera);
+            CameraManager.Instance.SetCurrentCamera(CameraType.Player);
         }
 
         #region Sprint Bar
@@ -524,6 +533,15 @@ public class FirstPersonController : MonoBehaviour
             // Resets when play stops moving
             timer = 0;
             joint.localPosition = new Vector3(Mathf.Lerp(joint.localPosition.x, jointOriginalPos.x, Time.deltaTime * bobSpeed), Mathf.Lerp(joint.localPosition.y, jointOriginalPos.y, Time.deltaTime * bobSpeed), Mathf.Lerp(joint.localPosition.z, jointOriginalPos.z, Time.deltaTime * bobSpeed));
+        }
+    }
+    
+    void OnDestroy()
+    {
+        // Unregister camera when destroyed
+        if (CameraManager.HasInstance)
+        {
+            CameraManager.Instance.UnregisterCamera(CameraType.Player);
         }
     }
 }
