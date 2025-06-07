@@ -27,9 +27,19 @@ namespace Scripts.Player.Controls
 
         private void Awake()
         {
-            if (promptContainer != null)
-                promptContainer.SetActive(false);
-                
+            promptContainer.SetActive(false);
+        }
+
+        private void Start()
+        {
+            // Use Observable.Timer to delay initialization until after all singletons are ready
+            Observable.Timer(System.TimeSpan.FromSeconds(0.1f))
+                .Subscribe(_ => InitializeManagers())
+                .AddTo(this);
+        }
+
+        private void InitializeManagers()
+        {
             // Subscribe to camera manager
             if (CameraManager.HasInstance)
             {
@@ -41,6 +51,10 @@ namespace Scripts.Player.Controls
                         SetupCameraPositionUpdates();
                     })
                     .AddTo(this);
+            }
+            else
+            {
+                Debug.LogError("InteractionUI: CameraManager not found! Make sure CameraManager is in the scene.");
             }
             
             // Subscribe to player manager
@@ -56,13 +70,17 @@ namespace Scripts.Player.Controls
             }
             else
             {
-                Debug.LogError("PlayerManager not found! Make sure PlayerManager is in the scene.");
+                Debug.LogError("InteractionUI: PlayerManager not found! Make sure PlayerManager is in the scene.");
             }
         }
         
         private void SetupPlayerInteractionSubscription()
         {
-            if (_playerInteraction == null) return;
+            if (_playerInteraction == null) 
+            {
+                Debug.LogWarning("InteractionUI: _playerInteraction is null, cannot setup subscription");
+                return;
+            }
             
             // Subscribe to closest interactable changes
             _playerInteraction.ClosestInteractable
@@ -70,6 +88,10 @@ namespace Scripts.Player.Controls
                 {
                     _currentInteractable = interactable;
                     UpdatePromptVisibility(interactable != null);
+                    if (interactable != null)
+                    {
+                        SetPromptText(interactable.InteractionPrompt);
+                    }
                 })
                 .AddTo(this);
         }
@@ -93,6 +115,10 @@ namespace Scripts.Player.Controls
             if (promptContainer != null)
             {
                 promptContainer.SetActive(visible);
+            }
+            else
+            {
+                Debug.LogWarning("InteractionUI: promptContainer is null!");
             }
         }
 

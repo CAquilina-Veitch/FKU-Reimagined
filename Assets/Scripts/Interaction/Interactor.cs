@@ -12,13 +12,20 @@ namespace Scripts.Interaction
         public Transform Position => transform;
         [SerializeField] protected Collider interactionCollider;
         [SerializeField] protected List<Interactable> interactables = new List<Interactable>();
+        [SerializeField] protected InteractionState _initialState = InteractionState.Ready;
         
         // Track the current closest interactable for UI purposes
         protected readonly ReactiveProperty<Interactable> _closestInteractable = new ReactiveProperty<Interactable>(null);
         public ReadOnlyReactiveProperty<Interactable> ClosestInteractable => _closestInteractable;
+        
+        // Track the interactor's state
+        protected readonly ReactiveProperty<InteractionState> _state = new ReactiveProperty<InteractionState>();
+        public ReadOnlyReactiveProperty<InteractionState> State => _state;
 
         protected virtual void Awake()
         {
+            _state.Value = _initialState;
+            
             if (interactionCollider == null)
             {
                 Debug.LogError($"Interaction collider not set on {gameObject.name}");
@@ -102,6 +109,9 @@ namespace Scripts.Interaction
 
         protected virtual void UpdateClosestInteractable()
         {
+            // Clean up any destroyed interactables
+            interactables.RemoveAll(i => i == null || i.Position == null);
+            
             if (interactables.Count == 0)
             {
                 _closestInteractable.Value = null;
@@ -110,6 +120,7 @@ namespace Scripts.Interaction
 
             var previousClosest = _closestInteractable.Value;
             _closestInteractable.Value = interactables
+                .Where(i => i != null && i.Position != null) // Additional safety check
                 .OrderBy(i => Vector3.Distance(i.Position.position, Position.position))
                 .FirstOrDefault();
                 
@@ -119,17 +130,46 @@ namespace Scripts.Interaction
             }
         }
 
+        public virtual bool CanInteract()
+        {
+            return _state.Value == InteractionState.Ready;
+        }
+
         public virtual void TryInteract()
         {
-            if (_closestInteractable.Value != null)
+            if (!CanInteract())
             {
-                _closestInteractable.Value.Interact();
-                OnInteractionPerformed(_closestInteractable.Value);
+                Debug.LogWarning($"{gameObject.name} cannot interact. Current state: {_state.Value}");
+                return;
             }
-            else
+
+            if (_closestInteractable.Value == null)
             {
-                Debug.LogWarning($"{gameObject} tried to interact, but no interactables were found.");
+                Debug.LogWarning($"{gameObject.name} tried to interact, but no interactables were found.");
+                return;
             }
+
+            // Check if the closest interactable still exists (wasn't destroyed)
+            if (_closestInteractable.Value == null || _closestInteractable.Value.Position == null)
+            {
+                Debug.LogWarning($"{gameObject.name} tried to interact with a destroyed object. Updating closest interactable.");
+                UpdateClosestInteractable();
+                return;
+            }
+
+            if (!_closestInteractable.Value.CanInteract())
+            {
+                Debug.LogWarning($"{gameObject.name} tried to interact with {_closestInteractable.Value.name}, but the interactable is not ready. State: {_closestInteractable.Value.State.CurrentValue}");
+                return;
+            }
+
+            _closestInteractable.Value.Interact(this);
+            OnInteractionPerformed(_closestInteractable.Value);
+        }
+
+        public void SetState(InteractionState newState)
+        {
+            _state.Value = newState;
         }
         
         // Virtual hooks for derived classes
@@ -141,6 +181,7 @@ namespace Scripts.Interaction
         protected virtual void OnDestroy()
         {
             _closestInteractable?.Dispose();
+            _state?.Dispose();
         }
     }
 }

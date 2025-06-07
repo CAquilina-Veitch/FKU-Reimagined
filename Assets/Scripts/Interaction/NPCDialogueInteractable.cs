@@ -11,7 +11,16 @@ namespace Scripts.Interaction
         
         private int currentDialogueIndex = 0;
         
-        public override void Interact()
+        protected override void Awake()
+        {
+            base.Awake();
+            if (string.IsNullOrEmpty(interactionPrompt))
+            {
+                interactionPrompt = $"Talk to {npcName}";
+            }
+        }
+        
+        protected override void OnInteract(Interactor interactor)
         {
             string messageToShow = GetDialogueLine();
             Debug.Log($"[{npcName}]: {messageToShow}");
@@ -41,13 +50,11 @@ namespace Scripts.Interaction
             }
         }
         
-        // Optional: Reset dialogue to beginning
         public void ResetDialogue()
         {
             currentDialogueIndex = 0;
         }
         
-        // Optional: Set specific dialogue line
         public void SetDialogueLine(int index)
         {
             if (index >= 0 && index < dialogueLines.Length)
@@ -56,7 +63,6 @@ namespace Scripts.Interaction
             }
         }
         
-        // Optional: Add new dialogue line at runtime
         public void AddDialogueLine(string newLine)
         {
             var newDialogueArray = new string[dialogueLines.Length + 1];

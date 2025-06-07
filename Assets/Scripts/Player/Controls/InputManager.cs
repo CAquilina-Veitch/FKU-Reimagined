@@ -26,7 +26,9 @@ namespace Scripts.Player.Controls
         
         // 3. Toggle states (press to toggle on/off)
         private readonly ReactiveProperty<bool> _walkToggled = new ReactiveProperty<bool>(false);
-        private readonly ReactiveProperty<bool> _inventoryOpen = new ReactiveProperty<bool>(false);
+        
+        // 3b. UI Toggle events (press once to toggle)
+        private readonly Subject<Unit> _inventoryTogglePressed = new Subject<Unit>();
         
         // 4. Continuous values (like movement)
         private readonly ReactiveProperty<Vector2> _moveInput = new ReactiveProperty<Vector2>(Vector2.zero);
@@ -45,7 +47,8 @@ namespace Scripts.Player.Controls
         public ReadOnlyReactiveProperty<bool> IsCrouchHeld => _crouchHeld;
         
         public ReadOnlyReactiveProperty<bool> IsWalkToggled => _walkToggled;
-        public ReadOnlyReactiveProperty<bool> IsInventoryOpen => _inventoryOpen;
+        
+        public Observable<Unit> OnInventoryTogglePressed => _inventoryTogglePressed;
         
         public ReadOnlyReactiveProperty<Vector2> MoveInput => _moveInput;
         public ReadOnlyReactiveProperty<Vector2> LookInput => _lookInput;
@@ -101,6 +104,7 @@ namespace Scripts.Player.Controls
             var sprintAction = playerActionMap.FindAction("Sprint");
             var crouchAction = playerActionMap.FindAction("Crouch");
             var attackAction = playerActionMap.FindAction("Attack");
+            var inventoryAction = playerActionMap.FindAction("Inventory");
             
             // Subscribe to actions that exist
             if (interactAction != null)
@@ -153,6 +157,15 @@ namespace Scripts.Player.Controls
                 attackAction.performed += _ => _ability1Pressed.OnNext(Unit.Default);
                 attackAction.canceled += _ => _ability1Released.OnNext(Unit.Default);
             }
+            
+            if (inventoryAction != null)
+            {
+                inventoryAction.performed += _ => _inventoryTogglePressed.OnNext(Unit.Default);
+            }
+            else
+            {
+                Debug.LogWarning("Inventory action not found in Player action map!");
+            }
         }
 
         protected override void OnBeforeDestroy()
@@ -163,7 +176,7 @@ namespace Scripts.Player.Controls
             _aimHeld?.Dispose();
             _crouchHeld?.Dispose();
             _walkToggled?.Dispose();
-            _inventoryOpen?.Dispose();
+            _inventoryTogglePressed?.Dispose();
             _moveInput?.Dispose();
             _lookInput?.Dispose();
             _ability1Pressed?.Dispose();
